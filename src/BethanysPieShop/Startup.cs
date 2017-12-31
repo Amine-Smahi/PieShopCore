@@ -11,19 +11,17 @@ using BethanysPieShop.Models;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 
 namespace BethanysPieShop
 {
     public class Startup
     {
-        private IConfigurationRoot _configurationRoot;
+        private IConfiguration _configurationRoot;
 
-        public Startup(IHostingEnvironment hostingEnvironment)
+        public Startup(IConfiguration configuration)
         {
-            _configurationRoot = new ConfigurationBuilder()
-                           .SetBasePath(hostingEnvironment.ContentRootPath)
-                           .AddJsonFile("appsettings.json")
-                           .Build();
+			_configurationRoot = configuration;
         }
 
         // This method gets called by the runtime. Use this method to add services to the container.
@@ -31,7 +29,7 @@ namespace BethanysPieShop
         public void ConfigureServices(IServiceCollection services)
         {
 
-            services.AddDbContext<AppDbContext>(options =>
+            services.AddDbContextPool<AppDbContext>(options =>
                                          options.UseSqlServer(_configurationRoot.GetConnectionString("DefaultConnection")));
 
             //services.AddTransient<ICategoryRepository, MockCategoryRepository>();
@@ -41,10 +39,11 @@ namespace BethanysPieShop
                 .AddEntityFrameworkStores<AppDbContext>();
 
             services.AddTransient<IPieRepository, PieRepository>();
-            services.AddTransient<ICategoryRepository, CategoryRepository>();
+			// All service that depends on DbContext should have Scoped life time.
+            services.AddScoped<ICategoryRepository, CategoryRepository>();
             services.AddSingleton<IHttpContextAccessor, HttpContextAccessor>();
             services.AddScoped<ShoppingCart>(sp => ShoppingCart.GetCart(sp));
-            services.AddTransient<IOrderRepository, OrderRepository>();
+            services.AddScoped<IOrderRepository, OrderRepository>();
 
             services.AddMvc();
 
@@ -53,7 +52,8 @@ namespace BethanysPieShop
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
-        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory)
+        public void Configure(IApplicationBuilder app, IHostingEnvironment env, ILoggerFactory loggerFactory,
+			AppDbContext appContext /* For seeding test data */)
         {
 
             if (env.IsDevelopment())
@@ -68,7 +68,7 @@ namespace BethanysPieShop
 
             app.UseStaticFiles();
             app.UseSession();
-            app.UseIdentity();
+            app.UseAuthentication();
 
             //app.UseMvcWithDefaultRoute();
 
@@ -86,9 +86,11 @@ namespace BethanysPieShop
                 
             });
 
-
-            DbInitializer.Seed(app);
-
-        }
+			// Should seed test data only in development.
+			if(env.IsDevelopment())
+			{
+				DbInitializer.Seed(appContext);
+			}
+		}
     }
 }
